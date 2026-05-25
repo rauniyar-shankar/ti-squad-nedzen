@@ -1,65 +1,132 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from './lib/supabase'; 
+
+export default function Logon() {
+  const [userid, setUserid] = useState('');
+  const [password, setPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+
+  // Handles pressing 'Enter' to move from UserID to Password, and then to Logon
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, field: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (field === 'userid' && passwordRef.current) {
+        passwordRef.current.focus();
+      } else if (field === 'password') {
+        handleLogon();
+      }
+    }
+  };
+
+  // The missing function! This checks the database and saves your session.
+  const handleLogon = async () => {
+    if (!userid || !password) {
+      setErrorMsg('DFHCE3549 ENTER USERID AND PASSWORD');
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMsg('VALIDATING RACF CREDENTIALS...');
+
+    try {
+      const { data, error } = await supabase
+        .from('racf_users')
+        .select('*')
+        .eq('userid', userid)
+        .eq('pin', password)
+        .single();
+
+      if (error || !data) {
+        setErrorMsg('DFHCE3549 REJECTED - INVALID LOGON ATTEMPT');
+        setUserid('');
+        setPassword('');
+        if (passwordRef.current) passwordRef.current.focus();
+      } else {
+        // --- THIS IS THE NEW SESSION LOCK ---
+        localStorage.setItem('racf_session', data.userid);
+        localStorage.setItem('user_nickname', data.nick_name || data.first_name);
+        setErrorMsg(`ACCESS GRANTED. WELCOME ${data.nick_name}.`);
+        setTimeout(() => {
+          router.push('/menu'); 
+        }, 1500); 
+      }
+    } catch (err) {
+      setErrorMsg('SYS_ERR: DATABASE CONNECTION FAILED');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div 
+      className="relative crt font-mono w-screen h-screen p-8 flex flex-col uppercase terminal-glow overflow-hidden"
+      style={{ backgroundColor: '#000000', color: '#33ff00' }}
+    >
+      <div className="flex justify-between w-full max-w-4xl tracking-widest text-sm md:text-base z-20">
+        <span>DFHCE3549</span>
+        <span>APPLID=NEDZEN</span>
+        <span>DATE=24.05.26</span>
+        <span>TIME=03:42:16</span>
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center -mt-32 tracking-widest z-20">
+        <h1 className="text-xl md:text-2xl mb-12 border-b-2 border-[#33ff00] pb-2 text-center">
+          TI SQUAD SECURE GATEWAY
+        </h1>
+        
+        <div className="w-full max-w-md flex flex-col items-center">
+          <p className="mb-6 text-center">PLEASE ENTER YOUR RACF CREDENTIALS</p>
+          
+          <div className="w-64">
+            <div className="flex mb-4 items-center">
+              <span className="w-24 text-right">USERID</span>
+              <span className="mx-2">{"===>"}</span>
+              <input
+                  autoFocus
+                  type="text"
+                  maxLength={12}
+                  value={userid}
+                  onChange={(e) => setUserid(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => handleKeyDown(e, 'userid')}
+                  disabled={isLoading}
+                  className="terminal-input w-32 border-b border-transparent focus:border-[#33ff00] disabled:opacity-50"
+                  spellCheck="false"
+/>
+            </div>
+
+            <div className="flex mb-8 items-center">
+              <span className="w-24 text-right">PASSWORD</span>
+              <span className="mx-2">{"===>"}</span>
+              <input
+                    ref={passwordRef}
+                    type="password"
+                    maxLength={12}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => handleKeyDown(e, 'password')}
+                    disabled={isLoading}
+                    className="terminal-input w-32 border-b border-transparent focus:border-[#33ff00] disabled:opacity-50"
+                    spellCheck="false"
+              />
+            </div>
+          </div>
+
+          <div className="h-8 text-center text-red-500 animate-pulse">
+            {errorMsg}
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </div> 
+
+      <div className="absolute bottom-8 left-8 tracking-widest text-sm z-20">
+        <p>PF3=END  PF12=CANCEL  ENTER=LOGON</p>
+      </div>
     </div>
   );
 }
